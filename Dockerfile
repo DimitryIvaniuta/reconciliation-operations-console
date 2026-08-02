@@ -5,7 +5,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginx:1.30.4-alpine AS runtime
+FROM nginx:1.31.3-alpine AS runtime
 RUN rm -f /etc/nginx/conf.d/default.conf \
     && mkdir -p /var/cache/nginx/client_temp /var/run/nginx \
     && chown -R nginx:nginx /var/cache/nginx /var/run/nginx /usr/share/nginx/html /etc/nginx/conf.d
