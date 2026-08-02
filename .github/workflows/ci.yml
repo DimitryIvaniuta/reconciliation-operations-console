@@ -1,0 +1,91 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm sbom --sbom-format=cyclonedx > sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-build-and-sbom
+          path: |
+            dist
+            sbom.cdx.json
+          if-no-files-found: error
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e -- --project=chromium
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build --tag reconciliation-console:test .
+      - name: Start hardened runtime container
+        run: |
+          docker run --detach --name reconciliation-console \
+            --publish 8080:8080 \
+            --read-only \
+            --tmpfs /etc/nginx/conf.d:uid=101,gid=101 \
+            --tmpfs /var/cache/nginx:uid=101,gid=101 \
+            --tmpfs /var/run:uid=101,gid=101 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --env BACKEND_API_URL=http://127.0.0.1:65535 \
+            --env BACKEND_API_KEY=ci-validation-key \
+            reconciliation-console:test
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8080/healthz && exit 0
+            sleep 1
+          done
+          docker logs reconciliation-console
+          exit 1
+      - name: Verify BFF request boundary
+        run: |
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request PUT http://127.0.0.1:8080/api/v1/replays)" = "405"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: text/plain' http://127.0.0.1:8080/api/v1/replays)" = "415"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Sec-Fetch-Site: cross-site' http://127.0.0.1:8080/api/v1/reconciliations)" = "403"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/actuator/env)" = "404"
+      - if: always()
+        run: docker rm --force reconciliation-console || true
