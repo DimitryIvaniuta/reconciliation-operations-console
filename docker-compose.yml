@@ -1,0 +1,24 @@
+services:
+  frontend:
+    build:
+      context: .
+    image: reconciliation-operations-console:2.0.0
+    ports:
+      - "4200:8080"
+    environment:
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://host.docker.internal:8080}
+      BACKEND_API_KEY: ${BACKEND_API_KEY:?Set BACKEND_API_KEY}
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local-docker}
+      APP_SUPPORT_URL: ${APP_SUPPORT_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /etc/nginx/conf.d:uid=101,gid=101
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
