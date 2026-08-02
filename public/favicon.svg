@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>LedgerGuard Operations</title>
+  <rect width="64" height="64" rx="15" fill="#0b1f3a"/>
+  <path d="M14 18h36v8H14zM14 30h25v8H14zM14 42h36v8H14z" fill="#52d3a5"/>
+  <circle cx="48" cy="34" r="8" fill="#f6b94d" stroke="#0b1f3a" stroke-width="4"/>
+</svg>
